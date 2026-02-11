@@ -810,11 +810,48 @@
                     </small>
                 </div>
 
+                <div class="form-group">
+                    <label for="adminPasswordSetting">Admin Password</label>
+                    <input type="password" id="adminPasswordSetting" placeholder="Set a password for Admin Mode access">
+                    <small style="color: #6b7280; font-size: 12px; display: block; margin-top: 4px;">
+                        If set, this password will be required to enter Admin Mode. Leave blank to allow unrestricted admin access.
+                    </small>
+                </div>
+
                 <div id="harvestStatusMessage" style="margin-top: 16px;"></div>
             </div>
             <div class="form-actions">
                 <button class="btn btn-secondary" onclick="closeHarvestSettingsModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="saveHarvestSettings()">Save & Test Connection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Password Modal -->
+    <div class="modal" id="adminPasswordModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>🔒 Admin Access</h2>
+                <button class="close-btn" onclick="closePasswordModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="adminPasswordInput">Password</label>
+                    <input 
+                        type="password" 
+                        id="adminPasswordInput" 
+                        placeholder="Enter admin password"
+                        onkeydown="if(event.key === 'Enter') submitAdminPassword()"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"
+                    >
+                    <div id="passwordError" style="display: none; color: #ef4444; font-size: 13px; margin-top: 6px;">
+                        ❌ Incorrect password. Please try again.
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-secondary" onclick="closePasswordModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAdminPassword()">Enter</button>
             </div>
         </div>
     </div>
@@ -1163,7 +1200,8 @@
                     accountId: settings.harvestAccountId || '',
                     accessToken: settings.harvestAccessToken || '',
                     invoiceState: settings.harvestInvoiceState || 'draft',
-                    productionUrl: settings.productionUrl || ''
+                    productionUrl: settings.productionUrl || '',
+                    adminPassword: settings.adminPassword || ''
                 };
             } catch (error) {
                 console.error('Error loading Harvest settings:', error);
@@ -1171,7 +1209,8 @@
                     accountId: '',
                     accessToken: '',
                     invoiceState: 'draft',
-                    productionUrl: ''
+                    productionUrl: '',
+                    adminPassword: ''
                 };
             }
         }
@@ -1655,7 +1694,44 @@ Founders Law`;
 
         // Toggle admin mode
         function toggleAdminMode() {
-            adminMode = !adminMode;
+            if (!adminMode) {
+                // Enabling admin - check if password is set
+                openPasswordModal();
+            } else {
+                // Disabling admin - no password needed
+                activateAdminMode(false);
+            }
+        }
+
+        function openPasswordModal() {
+            document.getElementById('adminPasswordInput').value = '';
+            document.getElementById('passwordError').style.display = 'none';
+            document.getElementById('adminPasswordModal').classList.add('active');
+            setTimeout(() => document.getElementById('adminPasswordInput').focus(), 100);
+        }
+
+        function closePasswordModal() {
+            document.getElementById('adminPasswordModal').classList.remove('active');
+        }
+
+        async function submitAdminPassword() {
+            const entered = document.getElementById('adminPasswordInput').value;
+            const settings = await loadHarvestSettings();
+            const correctPassword = settings.adminPassword || '';
+
+            // If no password has been set, allow access
+            if (!correctPassword || entered === correctPassword) {
+                closePasswordModal();
+                activateAdminMode(true);
+            } else {
+                document.getElementById('passwordError').style.display = 'block';
+                document.getElementById('adminPasswordInput').value = '';
+                document.getElementById('adminPasswordInput').focus();
+            }
+        }
+
+        function activateAdminMode(enable) {
+            adminMode = enable;
             const btn = document.getElementById('adminToggle');
             const addBtn = document.getElementById('addInvoiceBtn');
             const harvestSettingsBtn = document.getElementById('harvestSettingsBtn');
@@ -1886,6 +1962,7 @@ Founders Law`;
             document.getElementById('harvestAccessToken').value = settings.accessToken;
             document.getElementById('harvestInvoiceState').value = settings.invoiceState;
             document.getElementById('productionUrl').value = settings.productionUrl;
+            document.getElementById('adminPasswordSetting').value = settings.adminPassword;
             document.getElementById('harvestStatusMessage').innerHTML = '';
             document.getElementById('harvestSettingsModal').classList.add('active');
         }
@@ -1901,6 +1978,7 @@ Founders Law`;
             const accessToken = document.getElementById('harvestAccessToken').value.trim();
             const invoiceState = document.getElementById('harvestInvoiceState').value;
             const productionUrl = document.getElementById('productionUrl').value.trim();
+            const adminPassword = document.getElementById('adminPasswordSetting').value;
             const statusDiv = document.getElementById('harvestStatusMessage');
 
             if (!accountId || !accessToken) {
@@ -1933,6 +2011,7 @@ Founders Law`;
                     await saveHarvestSetting('harvestAccessToken', accessToken);
                     await saveHarvestSetting('harvestInvoiceState', invoiceState);
                     await saveHarvestSetting('productionUrl', productionUrl);
+                    await saveHarvestSetting('adminPassword', adminPassword);
 
                     statusDiv.innerHTML = `<div class="status-message status-success">✅ Connected successfully!<br>Account: ${data.email || 'Connected'}</div>`;
                     
