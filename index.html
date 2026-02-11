@@ -1129,12 +1129,21 @@
         }
 
         // Save individual approval to Google Sheets
+        // Get current approver name based on context
+        function getCurrentApprover() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const leadParam = urlParams.get('lead');
+            if (adminMode) return 'Admin';
+            if (leadParam) return leadParam;
+            return 'Unknown';
+        }
+
         async function saveApproval(invoiceId, approved) {
             try {
                 await callSheetsAPI('saveApproval', { 
                     invoiceId, 
                     approved,
-                    approvedBy: 'User' // Could capture actual user if needed
+                    approvedBy: approved ? getCurrentApprover() : '' // Clear approver if unapproving
                 });
                 console.log(`Approval saved for ${invoiceId}: ${approved}`);
             } catch (error) {
@@ -1494,7 +1503,7 @@ Founders Law`;
         async function updateStats() {
             const approvals = await loadApprovalState();
             const filteredInvoices = getFilteredInvoices();
-            const approved = filteredInvoices.filter(inv => approvals[inv.id]).length;
+            const approved = filteredInvoices.filter(inv => approvals[inv.id] && approvals[inv.id].approved).length;
             const total = filteredInvoices.length;
             const pending = total - approved;
             const totalBalance = filteredInvoices.reduce((sum, inv) => sum + inv.balance, 0);
@@ -1517,9 +1526,29 @@ Founders Law`;
                 row.classList.remove('approved');
             }
             
+            const statusCell = row.querySelector('.status-badge').parentElement;
             const statusBadge = row.querySelector('.status-badge');
             statusBadge.textContent = isChecked ? 'Approved' : 'Pending';
             statusBadge.className = isChecked ? 'status-badge status-approved' : 'status-badge status-pending';
+            
+            // Update approver name display
+            let approverEl = statusCell.querySelector('.approver-name');
+            if (isChecked) {
+                const approver = getCurrentApprover();
+                if (!approverEl) {
+                    approverEl = document.createElement('div');
+                    approverEl.className = 'approver-name';
+                    approverEl.style.cssText = 'font-size: 11px; color: #6b7280; margin-top: 3px;';
+                    statusCell.appendChild(approverEl);
+                }
+                approverEl.textContent = `by ${approver}`;
+            } else if (approverEl) {
+                approverEl.remove();
+            }
+            
+            // Update label
+            const label = row.querySelector(`label[for="approve-${invoiceId}"]`);
+            if (label) label.textContent = isChecked ? 'Approved' : 'Approve';
             
             updateStats();
         }
@@ -1546,7 +1575,9 @@ Founders Law`;
             }
             
             tbody.innerHTML = filteredInvoices.map((invoice, index) => {
-                const isApproved = approvals[invoice.id] || false;
+                const approvalData = approvals[invoice.id] || { approved: false, approvedBy: '' };
+                const isApproved = approvalData.approved || false;
+                const approvedBy = approvalData.approvedBy || '';
                 const globalIndex = invoices.findIndex(inv => inv.id === invoice.id);
                 return `
                     <tr data-invoice-id="${invoice.id}" class="${isApproved ? 'approved' : ''}">
@@ -1571,6 +1602,7 @@ Founders Law`;
                             <span class="status-badge ${isApproved ? 'status-approved' : 'status-pending'}">
                                 ${isApproved ? 'Approved' : 'Pending'}
                             </span>
+                            ${isApproved && approvedBy ? `<div style="font-size: 11px; color: #6b7280; margin-top: 3px;">by ${approvedBy}</div>` : ''}
                         </td>
                         <td style="text-align: center;">
                             <button 
