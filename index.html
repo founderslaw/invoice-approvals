@@ -598,6 +598,10 @@
             </div>
         </div>
 
+        <div id="readOnlyBanner" style="display: none; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-size: 13px; color: #475569; text-align: center;">
+            👁️ <strong>View Only</strong> — You are viewing a summary of all invoices. Open your personalised link to approve your invoices.
+        </div>
+
         <div class="filter-section">
             <label for="leadFilter">Filter by Lead:</label>
             <select id="leadFilter" onchange="filterByLead(this.value)">
@@ -1558,6 +1562,11 @@ Founders Law`;
             const approvals = await loadApprovalState();
             const tbody = document.getElementById('invoiceTableBody');
             const filteredInvoices = getFilteredInvoices();
+            const urlParams = new URLSearchParams(window.location.search);
+            const canApprove = adminMode || !!urlParams.get('lead');
+
+            // Show/hide read-only banner
+            document.getElementById('readOnlyBanner').style.display = canApprove ? 'none' : 'block';
             
             if (filteredInvoices.length === 0) {
                 tbody.innerHTML = `
@@ -1615,15 +1624,17 @@ Founders Law`;
                             </button>
                         </td>
                         <td>
-                            <div class="checkbox-container">
+                            <div class="checkbox-container" title="${!canApprove ? 'Open your personalised link to approve' : ''}">
                                 <input 
                                     type="checkbox" 
                                     id="approve-${invoice.id}" 
                                     ${isApproved ? 'checked' : ''}
+                                    ${!canApprove ? 'disabled' : ''}
                                     onchange="handleApprovalChange('${invoice.id}', this.checked)"
+                                    style="${!canApprove ? 'cursor: not-allowed; opacity: 0.4;' : ''}"
                                 >
-                                <label for="approve-${invoice.id}" style="cursor: pointer; color: #6b7280; font-size: 13px;">
-                                    ${isApproved ? 'Approved' : 'Approve'}
+                                <label for="approve-${invoice.id}" style="cursor: ${canApprove ? 'pointer' : 'not-allowed'}; color: ${canApprove ? '#6b7280' : '#adb5bd'}; font-size: 13px;">
+                                    ${isApproved ? 'Approved' : canApprove ? 'Approve' : 'View Only'}
                                 </label>
                             </div>
                         </td>
