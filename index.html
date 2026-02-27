@@ -896,7 +896,6 @@
         let editingIndex = null;
         let editingNotesInvoiceId = null; // Track which invoice we're editing notes for
         let showOnlyWithNotes = false; // Track notes filter state
-        let clientLeadList = {}; // Stores client → lead → email mappings
 
         // Pre-defined account leads with emails
         const predefinedLeads = [
@@ -938,7 +937,6 @@
                             lead: 'Tom',
                             leadEmail: 'Tom@founders-law.co.uk',
                             balance: 1122.00,
-                            currency: 'GBP',
                             link: 'https://founderslaw.harvestapp.com/invoices/sample001',
                             notes: '',
                             noteActioned: false
@@ -1217,17 +1215,6 @@
             }
         }
 
-        // Load client lead list from Google Sheets
-        async function loadClientLeadList() {
-            try {
-                clientLeadList = await getSheetsData('getClientLeadList');
-                console.log(`✅ Loaded ${Object.keys(clientLeadList).length} client lead mappings`);
-            } catch (error) {
-                console.error('Error loading client lead list:', error);
-                clientLeadList = {};
-            }
-        }
-
         // Save Harvest setting to Google Sheets
         async function saveHarvestSetting(key, value) {
             try {
@@ -1265,17 +1252,8 @@
         }
 
         // Format currency
-        function formatCurrency(amount, currency = 'GBP') {
-            const symbols = {
-                'GBP': '£',
-                'USD': '$',
-                'EUR': '€',
-                'AED': 'AED '
-            };
-            
-            const symbol = symbols[currency] || currency + ' ';
-            
-            return symbol + amount.toLocaleString('en-GB', {
+        function formatCurrency(amount) {
+            return '£' + amount.toLocaleString('en-GB', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
@@ -1367,7 +1345,7 @@
                 // Build invoice list with notes
                 let invoiceList = '';
                 leadInvoices.forEach(inv => {
-                    invoiceList += `\n• ${inv.id}: ${inv.client} - ${formatCurrency(inv.balance, inv.currency)}`;
+                    invoiceList += `\n• ${inv.id}: ${inv.client} - ${formatCurrency(inv.balance)}`;
                     if (inv.notes && inv.notes.trim() !== '') {
                         invoiceList += `\n  📝 Note: ${inv.notes}`;
                     }
@@ -1431,7 +1409,7 @@ Founders Law`;
             // Build invoice list with notes
             let invoiceList = '';
             leadInvoices.forEach(inv => {
-                invoiceList += `\n• ${inv.id}: ${inv.client} - ${formatCurrency(inv.balance, inv.currency)}`;
+                invoiceList += `\n• ${inv.id}: ${inv.client} - ${formatCurrency(inv.balance)}`;
                 if (inv.notes && inv.notes.trim() !== '') {
                     invoiceList += `\n  📝 Note: ${inv.notes}`;
                 }
@@ -1578,31 +1556,12 @@ Founders Law`;
             const approved = filteredInvoices.filter(inv => approvals[inv.id] && approvals[inv.id].approved).length;
             const total = filteredInvoices.length;
             const pending = total - approved;
-            
-            // Calculate totals by currency
-            const totals = {};
-            filteredInvoices.forEach(inv => {
-                const curr = inv.currency || 'GBP';
-                totals[curr] = (totals[curr] || 0) + inv.balance;
-            });
-            
-            // Format total balance
-            const currencies = Object.keys(totals);
-            let totalBalanceText = '';
-            if (currencies.length === 1) {
-                // Single currency - simple display
-                totalBalanceText = formatCurrency(totals[currencies[0]], currencies[0]);
-            } else if (currencies.length > 1) {
-                // Multiple currencies - show breakdown
-                totalBalanceText = currencies.map(curr => formatCurrency(totals[curr], curr)).join(' + ');
-            } else {
-                totalBalanceText = formatCurrency(0);
-            }
+            const totalBalance = filteredInvoices.reduce((sum, inv) => sum + inv.balance, 0);
 
             document.getElementById('totalCount').textContent = total;
             document.getElementById('approvedCount').textContent = approved;
             document.getElementById('pendingCount').textContent = pending;
-            document.getElementById('totalBalance').textContent = totalBalanceText;
+            document.getElementById('totalBalance').textContent = formatCurrency(totalBalance);
         }
 
         // Handle approval change
@@ -1692,7 +1651,7 @@ Founders Law`;
                             <div class="lead-name">${invoice.lead}</div>
                         </td>
                         <td class="balance">
-                            ${formatCurrency(invoice.balance, invoice.currency)}
+                            ${formatCurrency(invoice.balance)}
                         </td>
                         <td>
                             <span class="status-badge ${isApproved ? 'status-approved' : 'status-pending'}">
@@ -1962,150 +1921,31 @@ Founders Law`;
         }
 
         // Save invoice
-        async function saveInvoice(event) {
+        function saveInvoice(event) {
             event.preventDefault();
-            
-            const newLead = document.getElementById('leadName').value;
-            const newLeadEmail = document.getElementById('leadEmail').value;
             
             const invoice = {
                 id: document.getElementById('invoiceId').value,
                 client: document.getElementById('clientName').value,
                 clientDetail: document.getElementById('clientDetail').value,
-                lead: newLead,
-                leadEmail: newLeadEmail,
+                lead: document.getElementById('leadName').value,
+                leadEmail: document.getElementById('leadEmail').value,
                 balance: parseFloat(document.getElementById('balance').value),
                 link: document.getElementById('invoiceLink').value
             };
             
-            // Check if editing existing invoice and lead changed
             if (editingIndex !== null) {
-                const oldInvoice = invoices[editingIndex];
-                const clientName = invoice.client;
-                const oldLead = oldInvoice.lead;
-                
-                // Check if lead changed and differs from client lead list
-                if (newLead !== oldLead) {
-                    const expectedLead = clientLeadList[clientName];
-                    
-                    if (expectedLead && expectedLead.lead && expectedLead.lead !== newLead) {
-                        // Lead is different from client lead list
-                        const continueChange = confirm(
-                            `⚠️ You're changing the lead from "${expectedLead.lead}" to "${newLead}" for client "${clientName}".\n\n` +
-                            `The Client Lead List has "${expectedLead.lead}" assigned to this client.\n\n` +
-                            `Continue with this change?`
-                        );
-                        
-                        if (!continueChange) {
-                            return; // Cancel the save
-                        }
-                        
-                        // Ask if this is permanent
-                        const isPermanent = confirm(
-                            `Is this change permanent?\n\n` +
-                            `YES = Update the Client Lead List (${clientName} → ${newLead})\n` +
-                            `NO = This assignment is for this invoice run only`
-                        );
-                        
-                        if (isPermanent) {
-                            // Update client lead list
-                            try {
-                                await callSheetsAPI('updateClientLead', {
-                                    client: clientName,
-                                    lead: newLead,
-                                    email: newLeadEmail
-                                });
-                                
-                                // Update local cache
-                                clientLeadList[clientName] = { lead: newLead, email: newLeadEmail };
-                                
-                                console.log(`✅ Updated Client Lead List: ${clientName} → ${newLead}`);
-                            } catch (error) {
-                                console.error('Error updating client lead list:', error);
-                                alert('Warning: Lead assigned but Client Lead List update failed. Check console.');
-                            }
-                        } else {
-                            console.log(`ℹ️ Temporary assignment: ${clientName} → ${newLead} (Client Lead List unchanged)`);
-                        }
-                    }
-                }
-                
                 invoices[editingIndex] = invoice;
             } else {
                 invoices.push(invoice);
             }
             
-            await saveInvoices();
+            saveInvoices();
             updateLeadFilter();
             updateShareLinks();
             updateUnassignedCount();
             renderInvoices();
             closeInvoiceModal();
-        }
-
-        // Handle lead dropdown change with client lead list check
-        async function handleLeadChange(index, newLead) {
-            const invoice = invoices[index];
-            const clientName = invoice.client;
-            
-            // Get the new lead's email from predefined leads
-            const predefinedLead = predefinedLeads.find(l => l.name === newLead);
-            const newEmail = predefinedLead ? predefinedLead.email : '';
-            
-            // Check if this differs from the client lead list
-            const expectedLead = clientLeadList[clientName];
-            
-            if (expectedLead && expectedLead.lead && expectedLead.lead !== newLead) {
-                // Lead is different from client lead list
-                const continueChange = confirm(
-                    `⚠️ You're changing the lead from "${expectedLead.lead}" to "${newLead}" for client "${clientName}".\n\n` +
-                    `The Client Lead List has "${expectedLead.lead}" assigned to this client.\n\n` +
-                    `Continue with this change?`
-                );
-                
-                if (!continueChange) {
-                    // Revert the dropdown
-                    document.getElementById(`lead-${index}`).value = invoice.lead;
-                    return;
-                }
-                
-                // Ask if this is permanent
-                const isPermanent = confirm(
-                    `Is this change permanent?\n\n` +
-                    `YES = Update the Client Lead List (${clientName} → ${newLead})\n` +
-                    `NO = This assignment is for this invoice run only`
-                );
-                
-                if (isPermanent) {
-                    // Update client lead list
-                    try {
-                        await callSheetsAPI('updateClientLead', {
-                            client: clientName,
-                            lead: newLead,
-                            email: newEmail
-                        });
-                        
-                        // Update local cache
-                        clientLeadList[clientName] = { lead: newLead, email: newEmail };
-                        
-                        console.log(`✅ Updated Client Lead List: ${clientName} → ${newLead}`);
-                    } catch (error) {
-                        console.error('Error updating client lead list:', error);
-                        alert('Warning: Lead assigned but Client Lead List update failed. Check console.');
-                    }
-                } else {
-                    console.log(`ℹ️ Temporary assignment: ${clientName} → ${newLead} (Client Lead List unchanged)`);
-                }
-            }
-            
-            // Apply the change
-            invoice.lead = newLead;
-            invoice.leadEmail = newEmail;
-            
-            await saveInvoices();
-            updateLeadFilter();
-            updateUnassignedCount();
-            renderInvoices();
         }
 
         // Delete invoice
@@ -2304,7 +2144,6 @@ Founders Law`;
                             lead: existing.lead || '', // Preserve existing lead
                             leadEmail: existing.leadEmail || '', // Preserve existing email
                             balance: parseFloat(hInv.amount) || 0,
-                            currency: hInv.currency || 'GBP', // Capture currency from Harvest
                             link: `https://founderslaw.harvestapp.com/invoices/${hInv.id}`,
                             notes: existing.notes || '', // Preserve existing notes/feedback
                             noteActioned: existing.noteActioned || false // Preserve actioned status
@@ -2318,22 +2157,13 @@ Founders Law`;
                             id: invoiceId,
                             client: hInv.client?.name || 'Unknown Client',
                             clientDetail: hInv.subject || '',
-                            lead: '', // Will be auto-allocated below
+                            lead: '', // Will need to be assigned manually
                             leadEmail: '',
                             balance: parseFloat(hInv.amount) || 0,
-                            currency: hInv.currency || 'GBP', // Capture currency from Harvest
                             link: `https://founderslaw.harvestapp.com/invoices/${hInv.id}`,
                             notes: '', // No notes on new invoices
                             noteActioned: false
                         };
-
-                        // AUTO-ALLOCATE LEAD from client lead list
-                        const clientName = newInvoice.client;
-                        if (clientLeadList[clientName]) {
-                            newInvoice.lead = clientLeadList[clientName].lead;
-                            newInvoice.leadEmail = clientLeadList[clientName].email;
-                            console.log(`✅ Auto-allocated "${clientName}" → ${newInvoice.lead}`);
-                        }
 
                         invoices.push(newInvoice);
                         importedCount++;
@@ -2518,7 +2348,6 @@ Founders Law`;
                 `;
                 
                 await initializeSampleData();
-                await loadClientLeadList(); // Load client lead mappings
                 updateLeadFilter();
                 
                 const urlParams = new URLSearchParams(window.location.search);
