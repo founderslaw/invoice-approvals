@@ -897,7 +897,6 @@
         let editingNotesInvoiceId = null; // Track which invoice we're editing notes for
         let showOnlyWithNotes = false; // Track notes filter state
         let clientLeadList = {}; // Stores client → lead → email mappings
-        let clientLeadList = {}; // Stores client → lead → email mappings
 
         // Pre-defined account leads with emails
         const predefinedLeads = [
@@ -1215,17 +1214,6 @@
                     productionUrl: '',
                     adminPassword: ''
                 };
-            }
-        }
-
-        // Load client lead list from Google Sheets
-        async function loadClientLeadList() {
-            try {
-                clientLeadList = await getSheetsData('getClientLeadList');
-                console.log(`✅ Loaded ${Object.keys(clientLeadList).length} client lead mappings`);
-            } catch (error) {
-                console.error('Error loading client lead list:', error);
-                clientLeadList = {};
             }
         }
 
