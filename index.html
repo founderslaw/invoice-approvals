@@ -627,10 +627,6 @@
             <button class="btn btn-primary" onclick="syncFromHarvest()" id="syncHarvestBtn" style="display: none;">
                 🔄 Sync from Harvest
             </button>
-
-            <button class="btn btn-primary" onclick="openAddInvoiceModal()" id="addInvoiceBtn" style="display: none;">
-                + Add Invoice
-            </button>
         </div>
 
         <table>
@@ -671,24 +667,6 @@
                 <button class="close-btn" onclick="closeInvoiceModal()">×</button>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label for="invoiceLink">Harvest Invoice URL</label>
-                    <input type="url" id="invoiceLink" placeholder="https://founderslaw.harvestapp.com/invoices/..." style="width: 100%; margin-bottom: 8px;">
-                    <div style="display: flex; gap: 8px;">
-                        <button type="button" class="btn btn-primary" onclick="requestClaudeExtraction()" style="flex: 1;">
-                            🤖 Extract with Claude
-                        </button>
-                        <button type="button" class="btn btn-secondary" onclick="loadClaudeData()" style="flex: 1;">
-                            📋 Load Extracted Data
-                        </button>
-                    </div>
-                    <small style="color: #6b7280; font-size: 12px; display: block; margin-top: 4px;">
-                        1️⃣ Paste URL → 2️⃣ Click "Extract with Claude" → 3️⃣ Paste URL in Claude chat → 4️⃣ Copy returned data → 5️⃣ Click "Load Extracted Data"
-                    </small>
-                </div>
-
-                <div id="extractionStatus"></div>
-
                 <form id="invoiceForm" onsubmit="saveInvoice(event)">
                     <div class="form-group">
                         <label for="invoiceId">Invoice ID *</label>
@@ -954,165 +932,6 @@
         }
 
         // Request Claude extraction
-        function requestClaudeExtraction() {
-            const url = document.getElementById('invoiceLink').value;
-            const statusDiv = document.getElementById('extractionStatus');
-
-            if (!url) {
-                statusDiv.innerHTML = '<div class="status-message status-error">Please enter a Harvest invoice URL first</div>';
-                return;
-            }
-
-            if (!url.includes('harvestapp.com/invoices/')) {
-                statusDiv.innerHTML = '<div class="status-message status-error">Please enter a valid Harvest invoice URL</div>';
-                return;
-            }
-
-            // Copy a formatted message to clipboard
-            const message = `Extract invoice data from: ${url}`;
-            navigator.clipboard.writeText(message).then(() => {
-                statusDiv.innerHTML = `
-                    <div class="status-message status-success">
-                        ✅ <strong>Ready for Claude extraction!</strong><br><br>
-                        <strong>Next steps:</strong><br>
-                        1. Open your chat with Claude (Claude in Chrome or claude.ai)<br>
-                        2. Paste the copied message (already in your clipboard)<br>
-                        3. Claude will extract: Invoice ID, Client Name, Balance<br>
-                        4. Copy the JSON data Claude returns<br>
-                        5. Come back here and click "Load Extracted Data"<br><br>
-                        <em>Message copied to clipboard: "${message}"</em>
-                    </div>
-                `;
-            }).catch(() => {
-                statusDiv.innerHTML = `
-                    <div class="status-message status-loading">
-                        📋 <strong>Please copy this message and send to Claude:</strong><br><br>
-                        <code style="background: #f3f4f6; padding: 8px; border-radius: 4px; display: block; margin-top: 8px;">
-                        Extract invoice data from: ${url}
-                        </code>
-                    </div>
-                `;
-            });
-        }
-
-        // Load data extracted by Claude
-        function loadClaudeData() {
-            const statusDiv = document.getElementById('extractionStatus');
-            
-            navigator.clipboard.readText().then(text => {
-                try {
-                    // Try to parse as JSON
-                    const data = JSON.parse(text);
-                    
-                    // Fill the form
-                    if (data.invoiceId || data.invoiceNum) {
-                        document.getElementById('invoiceId').value = data.invoiceId || data.invoiceNum || '';
-                    }
-                    if (data.client || data.clientName) {
-                        document.getElementById('clientName').value = data.client || data.clientName || '';
-                    }
-                    if (data.balance) {
-                        document.getElementById('balance').value = data.balance;
-                    }
-                    if (data.link || data.url) {
-                        document.getElementById('invoiceLink').value = data.link || data.url || '';
-                    }
-
-                    statusDiv.innerHTML = `
-                        <div class="status-message status-success">
-                            ✅ <strong>Data loaded successfully!</strong><br>
-                            Invoice ID: ${data.invoiceId || data.invoiceNum || 'Not found'}<br>
-                            Client: ${data.client || data.clientName || 'Not found'}<br>
-                            Balance: £${data.balance || 'Not found'}<br><br>
-                            Please verify and add the Account Lead, then click Save!
-                        </div>
-                    `;
-                } catch (e) {
-                    // Not JSON, maybe it's formatted text
-                    statusDiv.innerHTML = `
-                        <div class="status-message status-error">
-                            ❌ Could not parse clipboard data as JSON.<br><br>
-                            <strong>Expected format from Claude:</strong><br>
-                            <code style="background: #f3f4f6; padding: 8px; border-radius: 4px; display: block; margin-top: 8px;">
-                            {<br>
-                            &nbsp;&nbsp;"invoiceId": "HL001 (Jan 26)",<br>
-                            &nbsp;&nbsp;"client": "Hanei Limited",<br>
-                            &nbsp;&nbsp;"balance": "5348.40",<br>
-                            &nbsp;&nbsp;"link": "https://..."<br>
-                            }
-                            </code><br>
-                            Please make sure you copied the JSON data from Claude.
-                        </div>
-                    `;
-                }
-            }).catch(err => {
-                statusDiv.innerHTML = `
-                    <div class="status-message status-error">
-                        ❌ Could not read clipboard. Please make sure you:<br>
-                        1. Copied the JSON data from Claude<br>
-                        2. Granted clipboard permissions to this page<br><br>
-                        Error: ${err.message}
-                    </div>
-                `;
-            });
-        }
-
-        // Fetch data from Harvest URL using browser automation
-        async function fetchFromHarvestURL() {
-            const url = document.getElementById('invoiceLink').value;
-            const statusDiv = document.getElementById('extractionStatus');
-
-            if (!url) {
-                statusDiv.innerHTML = '<div class="status-message status-error">Please enter a Harvest invoice URL first</div>';
-                return;
-            }
-
-            if (!url.includes('harvestapp.com/invoices/')) {
-                statusDiv.innerHTML = '<div class="status-message status-error">Please enter a valid Harvest invoice URL</div>';
-                return;
-            }
-
-            statusDiv.innerHTML = '<div class="status-message status-loading">🔄 Fetching invoice data from Harvest...</div>';
-
-            try {
-                // This will be handled by Claude in Chrome
-                const message = {
-                    action: 'fetchInvoice',
-                    url: url
-                };
-                
-                // Post message to parent window if in iframe, otherwise alert
-                if (window.parent !== window) {
-                    window.parent.postMessage(message, '*');
-                } else {
-                    alert('CLAUDE: Please use your browser automation tools to navigate to: ' + url + ' and extract the Client Name, Invoice Number, and Balance, then fill the form.');
-                }
-
-                statusDiv.innerHTML = '<div class="status-message status-loading">⏳ Waiting for Claude to extract data... (check your browser tabs)</div>';
-                
-            } catch (error) {
-                statusDiv.innerHTML = '<div class="status-message status-error">❌ Error: ' + error.message + '</div>';
-            }
-        }
-
-        // Function to fill form with extracted data (called by Claude)
-        function fillFormWithExtractedData(data) {
-            const statusDiv = document.getElementById('extractionStatus');
-            
-            if (data.client) {
-                document.getElementById('clientName').value = data.client;
-            }
-            if (data.invoiceNum) {
-                document.getElementById('invoiceId').value = data.invoiceNum;
-            }
-            if (data.balance) {
-                document.getElementById('balance').value = data.balance;
-            }
-
-            statusDiv.innerHTML = `<div class="status-message status-success">✅ Data extracted successfully!<br>Client: ${data.client || 'Not found'}<br>Invoice: ${data.invoiceNum || 'Not found'}<br>Balance: £${data.balance || 'Not found'}</div>`;
-        }
-
-        // Save invoices to Google Sheets
         // ===== GOOGLE SHEETS API FUNCTIONS =====
         
         // Call Google Sheets API
@@ -1781,7 +1600,6 @@ Founders Law`;
         function activateAdminMode(enable) {
             adminMode = enable;
             const btn = document.getElementById('adminToggle');
-            const addBtn = document.getElementById('addInvoiceBtn');
             const harvestSettingsBtn = document.getElementById('harvestSettingsBtn');
             const syncHarvestBtn = document.getElementById('syncHarvestBtn');
             const notice = document.getElementById('adminNotice');
@@ -1791,7 +1609,6 @@ Founders Law`;
             if (adminMode) {
                 btn.textContent = 'Exit Admin';
                 btn.className = 'btn btn-primary';
-                addBtn.style.display = 'block';
                 harvestSettingsBtn.style.display = 'block';
                 syncHarvestBtn.style.display = 'block';
                 notice.style.display = 'block';
@@ -1801,7 +1618,6 @@ Founders Law`;
             } else {
                 btn.textContent = 'Admin Mode';
                 btn.className = 'btn btn-secondary';
-                addBtn.style.display = 'none';
                 harvestSettingsBtn.style.display = 'none';
                 syncHarvestBtn.style.display = 'none';
                 notice.style.display = 'none';
@@ -1840,17 +1656,6 @@ Founders Law`;
         }
 
         // Open add invoice modal
-        function openAddInvoiceModal() {
-            editingIndex = null;
-            document.getElementById('modalTitle').textContent = 'Add Invoice';
-            document.getElementById('invoiceForm').reset();
-            document.getElementById('invoiceLink').value = '';
-            document.getElementById('extractionStatus').innerHTML = '';
-            document.getElementById('invoiceModal').classList.add('active');
-            updateLeadSuggestions();
-            document.getElementById('leadDropdown').value = '';
-        }
-
         // Open edit invoice modal
         function openEditInvoiceModal(index) {
             editingIndex = index;
@@ -1978,14 +1783,44 @@ Founders Law`;
                 link: document.getElementById('invoiceLink').value
             };
             
+            const clientName = invoice.client;
+            
             // Check if editing existing invoice and lead changed
             if (editingIndex !== null) {
                 const oldInvoice = invoices[editingIndex];
-                const clientName = invoice.client;
                 const oldLead = oldInvoice.lead;
                 
-                // Check if lead changed and differs from client lead list
-                if (newLead !== oldLead) {
+                // Check if lead was just assigned (previously empty)
+                if ((!oldLead || oldLead.trim() === '') && newLead) {
+                    // NEW lead assignment - check if client is in list
+                    if (!clientLeadList[clientName]) {
+                        const addToList = confirm(
+                            `Add "${clientName}" → ${newLead} to Client Lead List?\n\n` +
+                            `YES = Future invoices will auto-assign to ${newLead}\n` +
+                            `NO = Just assign for this invoice`
+                        );
+                        
+                        if (addToList) {
+                            try {
+                                await callSheetsAPI('updateClientLead', {
+                                    client: clientName,
+                                    lead: newLead,
+                                    email: newLeadEmail
+                                });
+                                
+                                // Update local cache
+                                clientLeadList[clientName] = { lead: newLead, email: newLeadEmail };
+                                
+                                console.log(`✅ Added to Client Lead List: ${clientName} → ${newLead}`);
+                            } catch (error) {
+                                console.error('Error adding to client lead list:', error);
+                                alert('Warning: Lead assigned but Client Lead List update failed. Check console.');
+                            }
+                        }
+                    }
+                }
+                // Check if lead changed (from one lead to another)
+                else if (newLead !== oldLead && oldLead && oldLead.trim() !== '') {
                     const expectedLead = clientLeadList[clientName];
                     
                     if (expectedLead && expectedLead.lead && expectedLead.lead !== newLead) {
@@ -2031,8 +1866,6 @@ Founders Law`;
                 }
                 
                 invoices[editingIndex] = invoice;
-            } else {
-                invoices.push(invoice);
             }
             
             await saveInvoices();
